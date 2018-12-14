@@ -1,0 +1,235 @@
+%% Filter Process Noise Covariance Example
+% 
+% This script serves as a brief tutorial on tuning the Process Noise 
+% Covariance for a Kalman Filter. Recal that the Kalman Filter is, for 
+% linear processes, the optimal Maximum Likelihood and Minimum Mean 
+% Squared Error estimator for the system described by:
+% 
+%   x(k+1) = F*x(k) + Gamma*v(k)        - State Transition
+%   z(k+1) = H*x(k+1) + w(k+1)          - Measurement
+% 
+% In this example, a vehicle will be driving on a road in two dimensions.
+% The vehicle state will be modeled as the x1 and x2 position, velocity,
+% and acceleration components.
+% 
+% The point of this script is to show what it means that the Process Noise
+% Covariance (Q) needs to be tuned. It's not like the Measurement Noise
+% Covariance (R) that can be measured by taking the standard deviation of
+% sensor errors. There are rules of thumb to guess Q, but beyond that
+% there's no theoretical way to do it. I think that it would probably be a
+% good problem for machine learning.
+% 
+% DEPENDENCIES
+% Q_Example_Data
+% 
+% @author: Matt Marti
+% @date: 2018-12-14
+
+clear, clc
+
+% Load zhist
+load('zhist.mat');
+N = size(zhist,2);
+
+
+%% Governing System Parameters
+% In this example, we'll assume we're measuring a car with a GPS. So the
+% system will essentially be x and y positions, velocities, accelerations.
+% The state will take the form:
+% 
+%   x(k) = [ x1; v1; a1; x2; v2; a2 ]
+% 
+% Measurements will take the form:
+% 
+%   z(k) = [ x1; v1; x2; v2 ]
+% 
+% Let the standard deviation of GPS be 5 meters for position, and 0.005 m/s
+% for velocity. This is essentially a loosely coupled GPS Filter.
+
+% Measurement Delta Time
+dt = 1;
+
+% F - State Transition Matrix
+F = [ 1,  dt,  dt^2/2, 0,  0,   0      ; ...
+      0,  1,   dt,     0,  0,   0      ; ...
+      0,  0,   1,      0,  0,   0      ; ...
+      0,  0,   0,      1,  dt,  dt^2/2 ; ...
+      0,  0,   0,      0,  1,   dt     ; ...
+      0,  0,   0,      0,  0,   1      ];
+
+% H - Measurement Model
+H = [ 1, 0, 0, 0, 0, 0 ;...
+      0, 1, 0, 0, 0, 0 ;...
+      0, 0, 0, 1, 0, 0 ;...
+      0, 0, 0, 0, 1, 0 ];
+
+% R - Measurement Noise Covariance
+R = [ 1^2,  0,      0,    0     ; ...
+      0,    0.5^2,  0,    0     ; ...
+      0,    0,      1^2,  0     ; ...
+      0,    0,      0,    0.5^2 ] / 100;
+
+
+%% Process Noise Stuff
+% These need to be chosen correctly to get better estimates. Try different
+% values to see how they improve or worsen the Chi-Squared Distribution
+% tests.
+% 
+% The way things are set up here, process noise affects velocity and
+% acceleration.
+
+% Gamma - Process Noise Gain
+% This is usually just 1s and 0s, and essentially just let's you add the
+% process noise v(k) to the state. Sometimes it has other values though,
+% especially when v(k) is a scalar. If this is the case, then v(k) needs to
+% be scaled in order to be used in the state transition function.
+Gamma = [ 0, 0, 0, 0 ; ...
+          1, 0, 0, 0 ; ...
+          0, 1, 0, 0 ; ...
+          0, 0, 0, 0 ; ...
+          0, 0, 1, 0 ; ...
+          0, 0, 0, 1 ];
+
+% Q - Process Noise Covariance
+% This is the real important part. These values are assumed, and there's no
+% solid theoretical way to get them. Hence, a machine learning technique
+% could be used to guess them to get the filter to work right. Not knowning
+% this matrix also extends to it's dimension. For example, here there is no
+% prcoess noise for position, but whose to say the car isn't slipping? Is
+% the noise correlated (elements off the diagonal)?
+Q = [ 0.1^2, 0,       0,     0       ; ...
+      0,     0.001^2, 0,     0       ; ...
+      0,     0,       0.1^2, 0       ; ...
+      0,     0,       0,     0.001^2 ];
+Q = diag( [ 1; 0.1; 1; 0.1 ] );
+% As an alternative, you can try to switch between the scalar values below
+
+% Gamma = ones(6,1);
+% Gamma = [1; 2; 2; 1; 2; 2];
+% Gamma = [1; 5; 10; 1; 5; 10];
+
+% Q = 0.5^2;
+% Q = 0.05^2;
+% Q = 0.005^2;
+% Q = 5^2;
+Q = 6*diag( [ 0.001; 0.01; 0.001; 0.01 ] );
+
+%% Run Filter on System
+
+% Initial state estimate - assume we are starting from the first GPS
+% measurement
+xhat0 = [ 0; 0; 0; 0; 0; 0 ];
+% xhat0 = [ 2; 4; -0.005; -1; -3; .002 ];
+
+% Initial Covariance estimate - This can be set pretty big and it will
+% converge fast for a linear system. Don't want it to be too small if you
+% think you're not accurate
+P0 = 10*eye(6);
+
+% Preallocate data arrays
+xhathist = zeros(6,N);
+Phist = zeros(6,6,N);
+epsilonhist = zeros(1,N);
+
+% Initialize loop variables
+xhatk = xhat0;
+Pk = P0;
+
+% Run Filter
+for kp1 = 1:N % Index by k+1
+    k = kp1 - 1;
+    
+    % Dynamic Propagation - Predict the next state
+    xbarkp1 = F*xhatk;
+    Pbarkp1 = F*Pk*(F') + Gamma*Q*(Gamma');
+    
+    % Obtain Data
+    zkp1 = zhist(:,kp1);
+    
+    % Filter Innovation
+    nukp1 = zkp1 - H*xbarkp1;
+    
+    % Compute Kalman Gain
+    Skp1 = H*Pbarkp1*(H') + R;
+    invSkp1 = inv(Skp1);
+    Wkp1 = Pbarkp1*(H')*invSkp1; %#ok
+    
+    % Measurement Update - Correct the prediction based on measurements
+    xhatkp1 = xbarkp1 + Wkp1*nukp1;
+    Pkp1 = Pbarkp1 - Wkp1*Skp1*(Wkp1');
+    
+    % Innovation Statistic
+    epsilonkp1 = (nukp1')*invSkp1*nukp1; %#ok
+    
+    % Save data
+    xhathist(:,kp1) = xhatkp1;
+    Phist(:,:,kp1) = Pkp1;
+    epsilonhist(kp1) = epsilonkp1;
+    
+    % Iterate
+    xhatk = xhatkp1;
+    Pk = Pkp1;
+end
+
+
+%% Chi-Squared Distribution Test for Filter Consistency
+% This is what's known as a consistency test. It makes sure that the Filter
+% Innovation is sampled from a Chi-Squared distribution of degree equal to 
+% the number of elements of the measurement vector z.
+
+% "1% of points may lie outside these bounds"
+alpha = 0.01;
+
+% Chi-Squared Distribution Bounds
+nz = 4; % Number of Measurements
+r1nu = chi2inv(alpha/2, nz);
+r2nu = chi2inv(1-alpha/2, nz);
+
+% Chi-squared distribution test
+passvec = zeros(N,1);
+for k = 1:N
+    passvec(k) = (r1nu <= epsilonhist(k)) && (epsilonhist(k) <= r2nu);
+end
+passrate = 100*sum(passvec)/length(passvec);
+pass = passrate >= 100*(1-alpha);
+
+
+%% Plot State Estimates
+
+load xhist.mat
+
+% Ground Track Plot
+figure(1)
+hold off
+plot(xhist(1,:), xhist(4,:),'k.-', 'linewidth', 1.25, 'markersize', 5);
+hold on
+plot(zhist(1,:), zhist(3,:),'ro', 'markersize', 5);
+plot(xhathist(1,:), xhathist(4,:),'b.-', 'linewidth', 1.25, 'markersize', 10);
+title('Object Ground Track');
+xlabel('x1');
+ylabel('y1');
+legend({'True', 'GPS','Kalman'});
+grid on, grid minor
+
+% Innovation Statistic Plot
+figure(2);
+hold off;
+semilogy(epsilonhist', 'linewidth', 1.5);
+hold on;
+semilogy(r1nu*ones(size(epsilonhist)), 'r--', 'linewidth', 1.75);
+semilogy(r2nu*ones(size(epsilonhist)), 'r--', 'linewidth', 1.75);
+semilogy(mean(epsilonhist)*ones(size(epsilonhist)), 'b-.', ...
+    'linewidth', 1);
+semilogy(nz*ones(size(epsilonhist)), 'k-.', 'linewidth', 1);
+hold off;
+title('Innovation Statistic Consistency Test Time History');
+ylabel('Innovation Statistic');
+xlabel('Index of Innovation Statistic k');
+grid on, grid minor;
+
+% Compare to true results
+figure(3);
+hold off
+plot((xhathist([1,4],:) - xhist([1,4],:))');
+title('Position Error Time History');
+grid on, grid minor
