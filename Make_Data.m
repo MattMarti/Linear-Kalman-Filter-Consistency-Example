@@ -23,7 +23,7 @@
 % good problem for machine learning.
 % 
 % @author: Matt Marti
-% @date: 2018-12-14
+% @date: 2018-12-16
 
 clear, clc
 
@@ -70,7 +70,7 @@ R = [ 5^2,  0,        0,    0       ; ...
       0,    0,        0,    0.001^2 ];
 
 
-%% Process Noise Stuff
+%% Process Noise
 % These need to be chosen correctly to get better estimates. Try different
 % values to see how they improve or worsen the Chi-Squared Distribution
 % tests.
@@ -79,16 +79,16 @@ R = [ 5^2,  0,        0,    0       ; ...
 % acceleration.
 
 % Gamma - Process Noise Gain
-% This is usually just 1s and 0s, and essentially just let's you add the
-% process noise v(k) to the state. Sometimes it has other values though,
-% especially when v(k) is a scalar. If this is the case, then v(k) is
-% scaled by this matrix.
-Gamma = [ 0, 0, 0, 0 ; ...
-          1, 0, 0, 0 ; ...
-          0, 1, 0, 0 ; ...
-          0, 0, 0, 0 ; ...
-          0, 0, 1, 0 ; ...
-          0, 0, 0, 1 ];
+% This is the partial derivative of the state transition function with
+% respect to the process noise terms. Essentially, it lets you add the
+% process noise to the state. The purpose of this matrix is more obvious
+% for non-linear functions and the Extended Kalman Filter.
+Gamma = [ 0,  0,  0,  0 ; ...
+          1,  0,  0,  0 ; ...
+          0,  1,  0,  0 ; ...
+          0,  0,  0,  0 ; ...
+          0,  0,  1,  0 ; ...
+          0,  0,  0,  1 ];
 
 % Q - Process Noise Covariance
 % This is the real important part. These values are assumed, and there's no
@@ -97,10 +97,27 @@ Gamma = [ 0, 0, 0, 0 ; ...
 % this matrix also extends to it's dimension. For example, here there is no
 % prcoess noise for position, but whose to say the car isn't slipping? Is
 % the noise correlated (elements off the diagonal)?
-Q = [ 0.01,  0,  0,     0  ; ...
-      0,     1,  0,     0  ; ...
-      0,     0,  0.01,  0  ; ...
-      0,     0,  0,     1  ];
+Q = [ 0.09,  0,  0,     0  ; ...
+      0,     4,  0,     0  ; ...
+      0,     0,  0.09,  0  ; ...
+      0,     0,  0,     4  ];
+
+% As an alternative, you can try to switch between the Q values below
+% Q = 0.0001*Q;
+% Q = 0.001*Q;
+% Q = 0.01*Q;
+% Q = 0.1*Q;
+% Q = 10*Q;
+% Q = 100*Q;
+% Q = 1000*Q;
+% Q = 10000*Q;
+% Q = 0.001*eye(4);
+% Q = 0.01*eye(4);
+% Q = 0.1*eye(4);
+% Q = 1*eye(4);
+% Q = 10*eye(4);
+% Q = 100*eye(4);
+% Q = 1000*eye(4);
 
 
 %% Run Filter on System
