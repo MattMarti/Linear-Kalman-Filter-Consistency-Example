@@ -224,6 +224,8 @@ else
     fprintf('Filter failed consistency test\n');
 end
 fprintf('Filter pass rate: %.2f\n', passrate);
+fprintf('Mean Innovation Statistic falls within bounds: %d\n', ...
+    r1nu_mean <= mean(epsilonhist) && mean(epsilonhist) <= r2nu_mean);
 
 
 %% Plot State Estimates
@@ -262,33 +264,33 @@ ylabel('Innovation Statistic');
 xlabel('Index of Innovation Statistic k');
 grid on, grid minor;
 
-% Position Error
-figure(3);
-hold off
-plot((xhathist([1,4],:) - xhist([1,4],:))');
-title('Position Error Time History');
-grid on, grid minor
-
-% Velocity Error
-figure(4);
-hold off
-plot((xhathist([2,5],:) - xhist([2,5],:))');
-title('Velocity Error Time History');
-grid on, grid minor
-
-% Acceleration Error
-figure(5);
-hold off
-plot((xhathist([3,6],:) - xhist([3,6],:))');
-title('Acceleration Error Time History');
-grid on, grid minor
-
 % Acceleration Time History
-figure(6);
+figure(3);
 hold off
 plot(xhist([3,6],:)', 'b');
 hold on
 plot(xhathist([3,6],:)','r');
 title('Acceleration Time History');
 legend({'True', '', 'Kalman', ''});
+grid on, grid minor
+
+% Position Error
+figure(4);
+hold off
+plot((xhathist([1,4],:) - xhist([1,4],:))');
+title('Position Error Time History');
+grid on, grid minor
+
+% Velocity Error
+figure(5);
+hold off
+plot((xhathist([2,5],:) - xhist([2,5],:))');
+title('Velocity Error Time History');
+grid on, grid minor
+
+% Acceleration Error
+figure(6);
+hold off
+plot((xhathist([3,6],:) - xhist([3,6],:))');
+title('Acceleration Error Time History');
 grid on, grid minor
